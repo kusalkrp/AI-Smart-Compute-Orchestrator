@@ -1,0 +1,143 @@
+# AI Smart Compute Orchestrator — Routing Policy Rules
+# Rules are evaluated in priority_order (lowest first). First match wins.
+# Conditions are ANDed. Empty conditions = default catch-all.
+
+rules:
+  # ── Priority / Urgency Based ────────────────────────────────────────────────
+
+  - name: urgent_complex_cloud
+    description: "Urgent + complex tasks go to cloud for fastest response"
+    priority_order: 10
+    conditions:
+      priority: URGENT
+      complexity_score_gt: 0.6
+    target: CLOUD
+    model: gemini-1.5-flash
+
+  - name: urgent_simple_gpu
+    description: "Urgent + simple tasks use GPU for speed without cloud cost"
+    priority_order: 15
+    conditions:
+      priority: URGENT
+      complexity_score_lte: 0.6
+      gpu_available: true
+      gpu_utilization_lte: 85.0
+    target: GPU
+    model: mistral:7b-instruct-q4_0
+
+  - name: urgent_fallback_cloud
+    description: "Urgent tasks when GPU unavailable -> cloud for guaranteed speed"
+    priority_order: 18
+    conditions:
+      priority: URGENT
+    target: CLOUD
+    model: gemini-1.5-flash
+
+  # ── Batch / Background Tasks ─────────────────────────────────────────────────
+
+  - name: batch_quantized
+    description: "Batch tasks with low latency need go to quantized model"
+    priority_order: 20
+    conditions:
+      is_batch: true
+      latency_sensitivity_lte: 0.4
+    target: QUANTIZED
+    model: phi3:mini
+
+  - name: batch_cpu_fallback
+    description: "Batch tasks when quantized unavailable → CPU"
+    priority_order: 25
+    conditions:
+      is_batch: true
+    target: CPU
+    model: phi3:mini
+
+  # ── Reasoning Tasks ───────────────────────────────────────────────────────────
+
+  - name: reasoning_cloud
+    description: "Complex reasoning tasks benefit from cloud model capability"
+    priority_order: 30
+    conditions:
+      requires_reasoning: true
+      complexity_score_gt: 0.7
+    target: CLOUD
+    model: gemini-1.5-flash
+
+  - name: reasoning_gpu
+    description: "Medium reasoning tasks can use GPU"
+    priority_order: 35
+    conditions:
+      requires_reasoning: true
+      gpu_available: true
+      gpu_utilization_lte: 80.0
+    target: GPU
+    model: mistral:7b-instruct-q4_0
+
+  # ── GPU Available (Normal Usage) ──────────────────────────────────────────────
+
+  - name: gpu_medium_tasks
+    description: "Medium complexity tasks with GPU available"
+    priority_order: 40
+    conditions:
+      gpu_available: true
+      gpu_utilization_lte: 75.0
+      complexity_score_gt: 0.3
+      estimated_tokens_lte: 4096
+    target: GPU
+    model: mistral:7b-instruct-q4_0
+
+  - name: gpu_large_tasks
+    description: "Large tasks need Llama 3 8B on GPU"
+    priority_order: 45
+    conditions:
+      gpu_available: true
+      gpu_utilization_lte: 70.0
+      estimated_tokens_gt: 4096
+    target: GPU
+    model: llama3:8b-instruct-q4_0
+
+  # ── Cost-Sensitive ─────────────────────────────────────────────────────────────
+
+  - name: cost_sensitive_cpu
+    description: "High cost sensitivity → CPU inference"
+    priority_order: 50
+    conditions:
+      cost_sensitivity_gt: 0.7
+      latency_sensitivity_lte: 0.5
+    target: CPU
+    model: phi3:mini
+
+  # ── CPU Overloaded → Cloud ────────────────────────────────────────────────────
+
+  - name: cpu_overloaded_cloud
+    description: "CPU overloaded → escalate to cloud"
+    priority_order: 60
+    conditions:
+      cpu_utilization_gt: 90.0
+      priority_gte: HIGH
+    target: CLOUD
+    model: gemini-1.5-flash
+
+  # ── Default Catch-All ──────────────────────────────────────────────────────────
+
+  - name: default_cpu
+    description: "Default: route to CPU for unknown/simple tasks"
+    priority_order: 999
+    conditions: {}
+    target: CPU
+    model: phi3:mini
+
+# ── Scoring Weights (Stage 2) ─────────────────────────────────────────────────
+# These weights are used by scoring_engine.py and updated by routing_optimizer.py
+scoring_weights:
+  cost_weight: 0.3
+  availability_weight: 0.3
+  success_rate_weight: 0.2
+  latency_weight: 0.2
+
+# ── Fallback Chain ─────────────────────────────────────────────────────────────
+fallback_chain:
+  GPU: CPU
+  CPU: QUANTIZED
+  QUANTIZED: CLOUD
+  CLOUD: CPU

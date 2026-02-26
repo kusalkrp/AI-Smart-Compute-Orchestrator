@@ -1,0 +1,50 @@
+# AI Smart Compute Orchestrator — Cost Configuration
+
+# Cost per 1,000 tokens (input+output average)
+cost_per_1k_tokens:
+  CLOUD:
+    gemini-2.0-flash: 0.00025      # $0.10/1M input + $0.40/1M output → avg $0.25/1M
+    gemini-2.0-flash-lite: 0.00010 # $0.075/1M input + $0.30/1M output → avg $0.1875/1M
+    gemini-1.5-flash: 0.000188     # $0.075/1M input + $0.30/1M output
+    gemini-1.5-pro: 0.003125       # $1.25/1M input + $5.00/1M output
+  GPU:
+    mistral:7b-instruct-q4_0: 0.0
+    llama3:8b-instruct-q4_0: 0.0
+  CPU:
+    phi3:mini: 0.0
+    mistral:7b-instruct-q4_0: 0.0
+  QUANTIZED:
+    phi3:mini: 0.0
+
+# Fixed overhead cost per request (infrastructure, electricity estimate)
+overhead_per_request:
+  CLOUD: 0.000010    # API call overhead
+  GPU: 0.000001      # Electricity estimate (negligible for demo)
+  CPU: 0.000001
+  QUANTIZED: 0.000001
+
+# Estimated latency in milliseconds (used for scoring when no history)
+default_latency_ms:
+  CLOUD:
+    gemini-2.0-flash: 1800
+    gemini-2.0-flash-lite: 1200
+    gemini-1.5-flash: 2000
+    gemini-1.5-pro: 3500
+  GPU:
+    mistral:7b-instruct-q4_0: 1500
+    llama3:8b-instruct-q4_0: 2000
+  CPU:
+    phi3:mini: 8000
+    mistral:7b-instruct-q4_0: 15000
+  QUANTIZED:
+    phi3:mini: 6000
+
+# Maximum tokens per model (for overflow detection)
+max_tokens:
+  gemini-2.0-flash: 1048576
+  gemini-2.0-flash-lite: 1048576
+  gemini-1.5-flash: 1048576
+  gemini-1.5-pro: 2097152
+  mistral:7b-instruct-q4_0: 32768
+  llama3:8b-instruct-q4_0: 8192
+  phi3:mini: 4096

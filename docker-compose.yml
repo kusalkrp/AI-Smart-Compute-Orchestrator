@@ -1,0 +1,115 @@
+# ── Shared env blocks ────────────────────────────────────────────────────────
+x-app-env: &app-env
+  DATABASE_URL: postgresql+asyncpg://orchestrator:orchestrator@postgres:5432/orchestrator
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  # Ollama runs on the host machine — workers reach it via host.docker.internal
+  OLLAMA_BASE_URL: http://host.docker.internal:11434
+
+x-worker-base: &worker-base
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.worker
+  env_file: .env
+  environment:
+    <<: *app-env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: orchestrator-postgres
+    environment:
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: orchestrator
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orchestrator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: orchestrator-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── API (creates tables + seeds on first start) ────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: orchestrator-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config        # live-edit routing rules without rebuild
+      - ./scripts:/app/scripts      # live-edit demo scripts without rebuild
+    restart: unless-stopped
+
+  # ── Workers ────────────────────────────────────────────────────────────────
+
+  worker-gpu:
+    <<: *worker-base
+    container_name: orchestrator-worker-gpu
+    command: ["python", "-m", "workers.gpu_worker"]
+
+  worker-cpu:
+    <<: *worker-base
+    container_name: orchestrator-worker-cpu
+    command: ["python", "-m", "workers.cpu_worker"]
+
+  worker-cloud:
+    <<: *worker-base
+    container_name: orchestrator-worker-cloud
+    command: ["python", "-m", "workers.cloud_worker"]
+
+  # ── Dashboard ──────────────────────────────────────────────────────────────
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: orchestrator-dashboard
+    ports:
+      - "8501:8501"
+    env_file: .env
+    environment:
+      DASHBOARD_API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

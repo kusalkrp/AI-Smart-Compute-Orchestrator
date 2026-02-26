@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e "."
+
+COPY . .
+
+# Ensure /app is on Python path so `from dashboard.x import y` works
+# (Streamlit only adds the script's own directory, not the project root)
+ENV PYTHONPATH=/app
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
